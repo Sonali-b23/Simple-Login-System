@@ -24,7 +24,7 @@ Simple-Login-System/
 ├── package.json        # Node.js dependencies
 ├── package-lock.json   # Locked dependency versions
 └── users.db            # SQLite database file (auto-generated)
--
+
 
 ## 📥 Clone the Repository
 
@@ -68,3 +68,4 @@ The backend server will run at: `http://localhost:3000`
 * **SQLite over NoSQL:** Lightweight, file-based persistence, no server setup required
 * **Stateless Backend:** Lockout logic in database ensures it persists across server restarts
 * **Vanilla JavaScript Frontend:** Simple, dependency-free, smooth API integration
+

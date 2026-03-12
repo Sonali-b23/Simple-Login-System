@@ -4,7 +4,7 @@ const cors = require('cors');
 const path = require('path');
 
 const app = express();
-const db = new Database('users.db');
+const db = new Database(path.join(__dirname, 'users.db'));
 
 app.use(cors()); 
 app.use(express.json()); 
@@ -23,19 +23,25 @@ db.exec(`
 
 app.post('/register', (req, res) => {
     const { email, password } = req.body;
+    if (!email || !password) return res.status(400).json({ error: 'Email and password are required.' });
+
+    const exists = db.prepare('SELECT 1 FROM users WHERE email = ?').get(email);
+    if (exists) return res.status(409).json({ error: 'Email already exists.' });
+
     try {
         db.prepare('INSERT INTO users (email, password) VALUES (?, ?)').run(email, password);
-        res.status(201).json({ message: "Registration successful!" });
+        res.status(201).json({ message: 'Registration successful!' });
     } catch (err) {
-        res.status(400).json({ error: "Email already exists." });
+        res.status(500).json({ error: 'Registration failed.' });
     }
 });
 
 app.post('/login', (req, res) => {
     const { email, password } = req.body;
-    const user = db.prepare('SELECT * FROM users WHERE email = ?').get(email);
+    if (!email || !password) return res.status(400).json({ error: 'Email and password are required.' });
 
-    if (!user) return res.status(404).json({ error: "User not found." });
+    const user = db.prepare('SELECT * FROM users WHERE email = ?').get(email);
+    if (!user) return res.status(404).json({ error: 'User not found.' });
 
     const currentTime = Date.now();
     const cooldown = 10000; // 10 seconds
@@ -47,30 +53,36 @@ app.post('/login', (req, res) => {
         if (timePassed < cooldown) {
             const secondsLeft = Math.ceil((cooldown - timePassed) / 1000);
             return res.status(403).json({ 
-                error: `Account is blocked... try after ${secondsLeft} secs` 
+                error: 'Account is blocked.',
+                secondsLeft
             });
         } else {
             // 10 seconds passed: Reset fails so they can try again
-            db.prepare('UPDATE users SET fail_count = 0 WHERE email = ?').run(email);
+            db.prepare('UPDATE users SET fail_count = 0, last_fail_time = 0 WHERE email = ?').run(email);
             user.fail_count = 0;
+            user.last_fail_time = 0;
         }
     }
 
     // 2. CREDENTIAL CHECK
     if (user.password === password) {
         // SUCCESS: Reset the fail_count to 0 immediately
-        db.prepare('UPDATE users SET fail_count = 0 WHERE email = ?').run(email);
-        res.json({ message: "Login successful! Your fail count has been reset." });
+        db.prepare('UPDATE users SET fail_count = 0, last_fail_time = 0 WHERE email = ?').run(email);
+        res.json({ message: 'Login successful! Your fail count has been reset.' });
     } else {
         // FAILURE: Increment fail count
         const newFailCount = user.fail_count + 1;
-        
+
         // If this was the 4th failure, record the time to start the 10s block
         const timestamp = newFailCount >= 4 ? currentTime : user.last_fail_time;
 
-        db.prepare('UPDATE users SET fail_count = ?, last_fail_time = ? WHERE email = ?')
-          .run(newFailCount, timestamp, email);
-          
+        db.prepare('UPDATE users SET fail_count = ?, last_fail_time = ? WHERE email = ?').run(newFailCount, timestamp, email);
+
+        // If newly blocked, return remaining seconds immediately
+        if (newFailCount >= 4) {
+            return res.status(403).json({ error: 'Account is blocked.', secondsLeft: Math.ceil(cooldown / 1000) });
+        }
+
         res.status(401).json({ error: `Invalid password. Attempt ${newFailCount}/4 before block.` });
     }
 });

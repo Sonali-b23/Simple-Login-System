@@ -19,8 +19,8 @@
         <input type="email" id="email" placeholder="Email" required>
         <input type="password" id="password" placeholder="Password" required>
         
-        <button class="btn-login" onclick="auth('login')">Login</button>
-        <button class="btn-reg" onclick="auth('register')">Register New Account</button>
+        <button id="btnLogin" class="btn-login" onclick="auth('login')">Login</button>
+        <button id="btnReg" class="btn-reg" onclick="auth('register')">Register New Account</button>
         
         <p id="msg"></p>
     </div>
@@ -34,7 +34,7 @@
             if(!email || !password) return alert("Please fill all fields");
 
             try {
-                const response = await fetch(`http://localhost:3000/${type}`, {
+                const response = await fetch(`/${type}`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ email, password })
@@ -43,10 +43,42 @@
                 const data = await response.json();
                 msg.innerText = data.message || data.error;
                 msg.style.color = response.ok ? "#28a745" : "#dc3545";
+
+                // If server returned a cooldown, start a client-side countdown
+                if (data.secondsLeft && data.secondsLeft > 0) {
+                    startCountdown(data.secondsLeft);
+                }
             } catch (error) {
                 msg.innerText = "Error: Check if server is running.";
                 msg.style.color = "#dc3545";
             }
+        }
+
+        let countdownTimer = null;
+        function startCountdown(seconds) {
+            clearInterval(countdownTimer);
+            const msg = document.getElementById('msg');
+            const btnLogin = document.getElementById('btnLogin');
+            const btnReg = document.getElementById('btnReg');
+
+            let remaining = seconds;
+            btnLogin.disabled = true;
+            btnReg.disabled = true;
+
+            msg.style.color = '#dc3545';
+            msg.innerText = `Account blocked. Try again in ${remaining}s`;
+
+            countdownTimer = setInterval(() => {
+                remaining -= 1;
+                if (remaining <= 0) {
+                    clearInterval(countdownTimer);
+                    msg.innerText = '';
+                    btnLogin.disabled = false;
+                    btnReg.disabled = false;
+                } else {
+                    msg.innerText = `Account blocked. Try again in ${remaining}s`;
+                }
+            }, 1000);
         }
     </script>
 </body>
